@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DataFuel — Amazon Ads Analyzer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    .metric-card { transition: transform .15s ease, box-shadow .15s ease; }
+    .metric-card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -10px rgba(0,0,0,.25); }
+    .table-wrap { max-height: 420px; overflow-y: auto; }
+    thead.sticky th { position: sticky; top: 0; background: #f8fafc; z-index: 1; }
+    .pill { padding: 2px 10px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+    .pill-scale { background: #dcfce7; color: #166534; }
+    .pill-optimize { background: #fef9c3; color: #854d0e; }
+    .pill-pause { background: #fee2e2; color: #991b1b; }
+    .rec-pill { padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+    .rec-Pause { background: #fee2e2; color: #991b1b; }
+    .rec-ReviewCreative { background: #e0e7ff; color: #3730a3; }
+    .rec-CheckTargeting { background: #fef3c7; color: #92400e; }
+    .rec-ReduceBudget { background: #fce7f3; color: #9d174d; }
+    .rec-IncreaseBudget { background: #dcfce7; color: #166534; }
+    .loader { border: 3px solid #e5e7eb; border-top-color: #4f46e5; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-20">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-indigo-600 text-white grid place-items-center font-bold text-lg">DF</div>
+        <div>
+          <h1 class="text-lg font-bold">DataFuel — Amazon Ads Analyzer</h1>
+          <p class="text-xs text-slate-500">FastAPI backend · Live dashboard</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button id="refreshBtn" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium flex items-center gap-2">
+          <span id="refreshIcon">↻</span> Refresh
+        </button>
+      </div>
+    </div>
+    <!-- Endpoint nav -->
+    <nav class="max-w-7xl mx-auto px-6 pb-3 flex items-center gap-2 flex-wrap text-xs">
+      <span class="text-slate-500 font-medium mr-2">Jump to:</span>
+      <a href="#summary" class="nav-pill px-3 py-1 rounded-md bg-slate-100 hover:bg-indigo-100 hover:text-indigo-700 text-slate-700 font-mono">/summary</a>
+      <a href="#recommendations" class="nav-pill px-3 py-1 rounded-md bg-slate-100 hover:bg-indigo-100 hover:text-indigo-700 text-slate-700 font-mono">/recommendations</a>
+      <a href="#insights" class="nav-pill px-3 py-1 rounded-md bg-slate-100 hover:bg-indigo-100 hover:text-indigo-700 text-slate-700 font-mono">/insights</a>
+      <a href="#analyze" class="nav-pill px-3 py-1 rounded-md bg-slate-100 hover:bg-indigo-100 hover:text-indigo-700 text-slate-700 font-mono">/analyze</a>
+      <a href="/docs" target="_blank" class="ml-auto px-3 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium">Swagger /docs ↗</a>
+    </nav>
+  </header>
+
+  <!-- Loading / Error states -->
+  <div id="loading" class="max-w-7xl mx-auto px-6 py-20 text-center hidden">
+    <div class="loader mx-auto"></div>
+    <p class="text-slate-500 mt-3 text-sm">Analyzing campaigns…</p>
+  </div>
+  <div id="error" class="max-w-7xl mx-auto px-6 py-6 hidden">
+    <div class="bg-red-50 border border-red-200 text-red-800 rounded-lg p-4 text-sm"></div>
+  </div>
+
+  <!-- Main dashboard -->
+  <main id="dashboard" class="max-w-7xl mx-auto px-6 py-8 space-y-8 hidden">
+
+    <!-- KPI Cards -->
+    <section id="summary" class="scroll-mt-32">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider">Account Overview <span class="text-slate-400 normal-case ml-2">/summary</span></h2>
+        <a href="/summary" target="_blank" class="text-xs text-indigo-600 hover:text-indigo-800 font-mono">View raw JSON ↗</a>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div class="metric-card bg-white rounded-xl p-5 border border-slate-200">
+          <p class="text-xs text-slate-500 font-medium uppercase">Total Spend</p>
+          <p id="kpi-spend" class="text-2xl font-bold mt-1 text-slate-900">—</p>
+        </div>
+        <div class="metric-card bg-white rounded-xl p-5 border border-slate-200">
+          <p class="text-xs text-slate-500 font-medium uppercase">Total Sales</p>
+          <p id="kpi-sales" class="text-2xl font-bold mt-1 text-emerald-600">—</p>
+        </div>
+        <div class="metric-card bg-white rounded-xl p-5 border border-slate-200">
+          <p class="text-xs text-slate-500 font-medium uppercase">Overall ROAS</p>
+          <p id="kpi-roas" class="text-2xl font-bold mt-1 text-indigo-600">—</p>
+        </div>
+        <div class="metric-card bg-white rounded-xl p-5 border border-slate-200">
+          <p class="text-xs text-slate-500 font-medium uppercase">Wasted Spend</p>
+          <p id="kpi-wasted" class="text-2xl font-bold mt-1 text-rose-600">—</p>
+          <p class="text-xs text-slate-500 mt-1">Of total spend going to Pause-labelled campaigns</p>
+        </div>
+        <div class="metric-card bg-white rounded-xl p-5 border border-slate-200">
+          <p class="text-xs text-slate-500 font-medium uppercase">Campaigns</p>
+          <p id="kpi-count" class="text-2xl font-bold mt-1 text-slate-900">—</p>
+          <p class="text-xs text-slate-500 mt-1">Analyzed from CSV</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Chart + Best/Worst -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="bg-white rounded-xl p-5 border border-slate-200 lg:col-span-1">
+        <h3 class="font-semibold text-slate-700 mb-3">Label Breakdown</h3>
+        <canvas id="labelChart" height="220"></canvas>
+      </div>
+
+      <div class="bg-white rounded-xl p-5 border border-slate-200 lg:col-span-2">
+        <h3 class="font-semibold text-slate-700 mb-3">Best / Worst Performer</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="border border-emerald-200 bg-emerald-50 rounded-lg p-4">
+            <p class="text-xs font-semibold text-emerald-700 uppercase">Best ROAS</p>
+            <p id="best-name" class="text-lg font-bold mt-1 text-slate-900">—</p>
+            <p id="best-roas" class="text-sm text-emerald-700 mt-1">—</p>
+          </div>
+          <div class="border border-rose-200 bg-rose-50 rounded-lg p-4">
+            <p class="text-xs font-semibold text-rose-700 uppercase">Worst ROAS (of active)</p>
+            <p id="worst-name" class="text-lg font-bold mt-1 text-slate-900">—</p>
+            <p id="worst-roas" class="text-sm text-rose-700 mt-1">—</p>
+          </div>
+        </div>
+        <p class="text-xs text-slate-500 mt-3">Worst considers only campaigns with actual spend, so paused-from-birth rows don't dominate.</p>
+      </div>
+    </section>
+
+    <!-- Recommendations -->
+    <section id="recommendations" class="scroll-mt-32">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider">Top 3 Recommended Actions <span class="text-slate-400 font-normal normal-case ml-2">/recommendations</span></h2>
+        <a href="/recommendations" target="_blank" class="text-xs text-indigo-600 hover:text-indigo-800 font-mono">View raw JSON ↗</a>
+      </div>
+      <div id="recs" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+      <p id="recs-note" class="text-xs text-slate-500 mt-3"></p>
+    </section>
+
+    <!-- Insights -->
+    <section id="insights" class="bg-white rounded-xl border border-slate-200 overflow-hidden scroll-mt-32">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 class="font-semibold text-slate-700">Flagged Campaigns <span class="text-slate-400 font-normal text-sm">/insights</span></h2>
+          <p id="insights-summary" class="text-xs text-slate-500 mt-1">—</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <input id="insightsFilter" placeholder="Filter by campaign or recommendation…" class="text-sm px-3 py-2 border border-slate-300 rounded-md w-72 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <a href="/insights" target="_blank" class="text-xs text-indigo-600 hover:text-indigo-800 font-mono whitespace-nowrap">Raw JSON ↗</a>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="w-full text-sm">
+          <thead class="sticky bg-slate-50">
+            <tr>
+              <th class="text-left px-5 py-2 font-semibold text-slate-600">Campaign</th>
+              <th class="text-left px-5 py-2 font-semibold text-slate-600">Issue</th>
+              <th class="text-left px-5 py-2 font-semibold text-slate-600">Metric</th>
+              <th class="text-left px-5 py-2 font-semibold text-slate-600">Recommendation</th>
+              <th class="text-left px-5 py-2 font-semibold text-slate-600">Why</th>
+            </tr>
+          </thead>
+          <tbody id="insightsTable" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- All Campaigns -->
+    <section id="analyze" class="bg-white rounded-xl border border-slate-200 overflow-hidden scroll-mt-32">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 class="font-semibold text-slate-700">All Campaigns <span class="text-slate-400 font-normal text-sm">/analyze</span></h2>
+          <p class="text-xs text-slate-500 mt-1">Click a column to sort.</p>
+        </div>
+        <div class="flex gap-2 items-center">
+          <select id="labelFilter" class="text-sm px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">All labels</option>
+            <option value="Scale">Scale</option>
+            <option value="Optimize">Optimize</option>
+            <option value="Pause">Pause</option>
+          </select>
+          <input id="campaignsFilter" placeholder="Filter campaigns…" class="text-sm px-3 py-2 border border-slate-300 rounded-md w-64 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <a href="/analyze" target="_blank" class="text-xs text-indigo-600 hover:text-indigo-800 font-mono whitespace-nowrap">Raw JSON ↗</a>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="w-full text-sm">
+          <thead class="sticky bg-slate-50">
+            <tr id="campaignsHead"></tr>
+          </thead>
+          <tbody id="campaignsTable" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="text-center text-xs text-slate-400 py-6">
+      DataFuel SDE Intern Assessment · Built with FastAPI, Tailwind, Chart.js
+    </footer>
+  </main>
+
+  <script>
+    const RUPEE = '\u20B9';
+    const fmtMoney = v => `${RUPEE}${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const fmtNum = (v, d = 2) => Number(v).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d });
+    const recClass = r => 'rec-' + (r || '').replace(/\s+/g, '');
+
+    let state = {
+      campaigns: [],
+      summary: null,
+      insights: null,
+      recs: null,
+      sort: { key: 'spend', dir: 'desc' },
+    };
+    let chart = null;
+
+    const $ = sel => document.querySelector(sel);
+    const el = (tag, props = {}, children = []) => {
+      const e = document.createElement(tag);
+      Object.entries(props).forEach(([k, v]) => {
+        if (k === 'class') e.className = v;
+        else if (k === 'html') e.innerHTML = v;
+        else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+        else e.setAttribute(k, v);
+      });
+      (Array.isArray(children) ? children : [children]).forEach(c => {
+        if (c == null) return;
+        if (c instanceof Node) e.appendChild(c);
+        else e.appendChild(document.createTextNode(String(c)));
+      });
+      return e;
+    };
+
+    // API base: use current origin when served by FastAPI; fall back to localhost when opened via file://.
+    const API_BASE = (location.protocol === 'file:' || !location.origin || location.origin === 'null')
+      ? 'http://127.0.0.1:8000'
+      : '';
+
+    async function fetchJSON(path) {
+      const url = API_BASE + path;
+      const res = await fetch(url);
+      const ct = res.headers.get('content-type') || '';
+      if (!res.ok) {
+        throw new Error(`${path} -> HTTP ${res.status}`);
+      }
+      if (!ct.includes('application/json')) {
+        const preview = (await res.text()).slice(0, 80);
+        throw new Error(`${path} returned ${ct || 'no content-type'} (expected JSON). Preview: "${preview}"`);
+      }
+      return res.json();
+    }
+
+    async function fetchAll() {
+      $('#loading').classList.remove('hidden');
+      $('#dashboard').classList.add('hidden');
+      $('#error').classList.add('hidden');
+      try {
+        const [a, s, i, r] = await Promise.all([
+          fetchJSON('/analyze'),
+          fetchJSON('/summary'),
+          fetchJSON('/insights'),
+          fetchJSON('/recommendations'),
+        ]);
+        state.campaigns = a;
+        state.summary = s;
+        state.insights = i;
+        state.recs = r;
+        render();
+        $('#loading').classList.add('hidden');
+        $('#dashboard').classList.remove('hidden');
+      } catch (e) {
+        $('#loading').classList.add('hidden');
+        const err = $('#error');
+        const hint = (location.protocol === 'file:')
+          ? ' — It looks like you opened this file directly. Start the server with <code class="bg-red-100 px-1 rounded">uvicorn main:app --reload</code> and visit <a href="http://127.0.0.1:8000/" class="underline font-semibold">http://127.0.0.1:8000/</a>'
+          : ' — Make sure the FastAPI server is running and serving this page.';
+        err.querySelector('div').innerHTML = '<strong>Failed to load data:</strong> ' + e.message + hint;
+        err.classList.remove('hidden');
+      }
+    }
+
+    function render() {
+      renderKPIs();
+      renderChart();
+      renderBestWorst();
+      renderRecs();
+      renderInsights();
+      renderCampaigns();
+    }
+
+    function renderKPIs() {
+      const s = state.summary;
+      $('#kpi-spend').textContent = fmtMoney(s.total_spend);
+      $('#kpi-sales').textContent = fmtMoney(s.total_sales);
+      $('#kpi-roas').textContent = fmtNum(s.overall_roas, 2) + 'x';
+      $('#kpi-wasted').textContent = fmtNum(s.wasted_spend_pct, 2) + '%';
+      $('#kpi-count').textContent = state.campaigns.length;
+    }
+
+    function renderChart() {
+      const lb = state.summary.label_breakdown;
+      const ctx = document.getElementById('labelChart').getContext('2d');
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Scale', 'Optimize', 'Pause'],
+          datasets: [{
+            data: [lb.Scale, lb.Optimize, lb.Pause],
+            backgroundColor: ['#22c55e', '#eab308', '#ef4444'],
+            borderWidth: 0,
+          }],
+        },
+        options: {
+          plugins: { legend: { position: 'bottom' } },
+          cutout: '65%',
+        },
+      });
+    }
+
+    function renderBestWorst() {
+      const s = state.summary;
+      if (s.best_campaign) {
+        $('#best-name').textContent = s.best_campaign.name;
+        $('#best-roas').textContent = 'ROAS: ' + fmtNum(s.best_campaign.roas, 2) + 'x';
+      }
+      if (s.worst_campaign) {
+        $('#worst-name').textContent = s.worst_campaign.name;
+        $('#worst-roas').textContent = 'ROAS: ' + fmtNum(s.worst_campaign.roas, 2) + 'x';
+      }
+    }
+
+    function renderRecs() {
+      const container = $('#recs');
+      container.innerHTML = '';
+      state.recs.top_actions.forEach((a, idx) => {
+        const card = el('div', { class: 'bg-white rounded-xl p-5 border border-slate-200 metric-card' }, [
+          el('div', { class: 'flex items-center justify-between mb-2' }, [
+            el('span', { class: 'text-xs font-bold text-slate-400' }, `#${idx + 1}`),
+            el('span', { class: 'rec-pill ' + recClass(a.action) }, a.action),
+          ]),
+          el('p', { class: 'font-bold text-slate-900 text-lg' }, a.campaign),
+          el('p', { class: 'text-sm text-slate-600 mt-1' }, a.reason),
+          el('div', { class: 'mt-3 pt-3 border-t border-slate-100' }, [
+            el('p', { class: 'text-xs text-slate-500 uppercase font-semibold' }, 'Estimated Impact'),
+            el('p', { class: 'text-sm font-semibold text-indigo-600 mt-1' }, a.estimated_impact),
+          ]),
+        ]);
+        container.appendChild(card);
+      });
+      $('#recs-note').textContent = state.recs.note;
+    }
+
+    function renderInsights() {
+      $('#insights-summary').textContent = state.insights.summary;
+      const q = $('#insightsFilter').value.toLowerCase();
+      const tbody = $('#insightsTable');
+      tbody.innerHTML = '';
+      const filtered = state.insights.flagged_campaigns.filter(f =>
+        !q || f.campaign_name.toLowerCase().includes(q) || f.recommendation.toLowerCase().includes(q)
+      );
+      if (!filtered.length) {
+        tbody.appendChild(el('tr', {}, [el('td', { class: 'px-5 py-6 text-center text-slate-400 text-sm', colspan: '5' }, 'No matches.')]));
+        return;
+      }
+      filtered.forEach(f => {
+        tbody.appendChild(el('tr', { class: 'hover:bg-slate-50' }, [
+          el('td', { class: 'px-5 py-3 font-medium text-slate-900' }, f.campaign_name),
+          el('td', { class: 'px-5 py-3 text-slate-700' }, f.issue),
+          el('td', { class: 'px-5 py-3 text-slate-700 font-mono text-xs' }, f.metric_value),
+          el('td', { class: 'px-5 py-3' }, [el('span', { class: 'rec-pill ' + recClass(f.recommendation) }, f.recommendation)]),
+          el('td', { class: 'px-5 py-3 text-slate-500 text-xs max-w-sm' }, f.reason),
+        ]));
+      });
+    }
+
+    const CAMPAIGN_COLS = [
+      { key: 'campaign', label: 'Campaign', fmt: v => v },
+      { key: 'budget', label: 'Budget', fmt: fmtMoney, num: true },
+      { key: 'impressions', label: 'Impr.', fmt: v => v.toLocaleString(), num: true },
+      { key: 'clicks', label: 'Clicks', fmt: v => v.toLocaleString(), num: true },
+      { key: 'spend', label: 'Spend', fmt: fmtMoney, num: true },
+      { key: 'orders', label: 'Orders', fmt: v => v, num: true },
+      { key: 'sales', label: 'Sales', fmt: fmtMoney, num: true },
+      { key: 'ctr', label: 'CTR %', fmt: v => fmtNum(v, 2), num: true },
+      { key: 'cpc', label: 'CPC', fmt: fmtMoney, num: true },
+      { key: 'conversion_rate', label: 'Conv %', fmt: v => fmtNum(v, 2), num: true },
+      { key: 'roas', label: 'ROAS', fmt: v => fmtNum(v, 2) + 'x', num: true },
+      { key: 'acos', label: 'ACOS %', fmt: v => fmtNum(v, 2), num: true },
+      { key: 'label', label: 'Label', fmt: v => v, pill: true },
+    ];
+
+    function renderCampaigns() {
+      const head = $('#campaignsHead');
+      head.innerHTML = '';
+      CAMPAIGN_COLS.forEach(col => {
+        const th = el('th', {
+          class: 'px-4 py-2 text-left font-semibold text-slate-600 cursor-pointer select-none hover:bg-slate-100',
+          onclick: () => sortBy(col.key),
+        });
+        const arrow = state.sort.key === col.key ? (state.sort.dir === 'asc' ? ' ↑' : ' ↓') : '';
+        th.textContent = col.label + arrow;
+        head.appendChild(th);
+      });
+
+      const q = $('#campaignsFilter').value.toLowerCase();
+      const labelQ = $('#labelFilter').value;
+      let rows = state.campaigns.filter(c =>
+        (!q || c.campaign.toLowerCase().includes(q)) && (!labelQ || c.label === labelQ)
+      );
+      const { key, dir } = state.sort;
+      rows.sort((a, b) => {
+        const av = a[key], bv = b[key];
+        if (typeof av === 'string') return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+        return dir === 'asc' ? av - bv : bv - av;
+      });
+
+      const tbody = $('#campaignsTable');
+      tbody.innerHTML = '';
+      rows.forEach(c => {
+        const tr = el('tr', { class: 'hover:bg-slate-50' });
+        CAMPAIGN_COLS.forEach(col => {
+          if (col.pill) {
+            tr.appendChild(el('td', { class: 'px-4 py-2' }, [
+              el('span', { class: 'pill pill-' + c.label.toLowerCase() }, c.label),
+            ]));
+          } else {
+            tr.appendChild(el('td', { class: 'px-4 py-2 ' + (col.num ? 'text-right font-mono text-xs' : '') }, col.fmt(c[col.key])));
+          }
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    function sortBy(key) {
+      if (state.sort.key === key) {
+        state.sort.dir = state.sort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.sort.key = key;
+        state.sort.dir = 'desc';
+      }
+      renderCampaigns();
+    }
+
+    $('#refreshBtn').addEventListener('click', fetchAll);
+    $('#insightsFilter').addEventListener('input', renderInsights);
+    $('#campaignsFilter').addEventListener('input', renderCampaigns);
+    $('#labelFilter').addEventListener('change', renderCampaigns);
+
+    fetchAll();
+  </script>
+</body>
+</html>

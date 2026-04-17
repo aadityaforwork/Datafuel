@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.cache/
+
+# Generated output
+data/campaigns_analyzed.csv
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment / secrets
+.env
+.env.local
+*.pem

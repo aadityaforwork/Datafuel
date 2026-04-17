@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(venv/Scripts/python.exe -c ' *)",
+      "Bash(venv/Scripts/uvicorn.exe main:app --host 127.0.0.1 --port 8766 --log-level warning)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8766/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8766/analyze)",
+      "Bash(curl -s http://127.0.0.1:8766/api)",
+      "Bash(curl -s http://127.0.0.1:8766/)",
+      "Bash(venv/Scripts/uvicorn.exe main:app --host 127.0.0.1 --port 8767 --log-level warning)"
+    ]
+  }
+}
